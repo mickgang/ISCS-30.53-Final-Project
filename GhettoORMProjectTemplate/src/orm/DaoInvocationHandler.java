@@ -1,13 +1,13 @@
 package orm;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
-import annotations.Column;
-import annotations.Table;
+import annotations.*;
 import realdb.GhettoJdbcBlackBox;
 
 public class DaoInvocationHandler implements InvocationHandler {
@@ -21,20 +21,35 @@ public class DaoInvocationHandler implements InvocationHandler {
 		{
 			jdbc = new GhettoJdbcBlackBox();
 			jdbc.init("com.mysql.cj.jdbc.Driver", 				// DO NOT CHANGE
-					  "jdbc:mysql://localhost/jdbcblackbox",    // change jdbcblackbox to the DB name you wish to use
+					  "jdbc:mysql://localhost/jdbcblackbox?useSSL=false",    // change jdbcblackbox to the DB name you wish to use
 					  "root", 									// USER NAME
-					  "");										// PASSWORD
+					  "jasperkim");										// PASSWORD
 		}
 	}
 	
 	@Override
 	public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-		
 		// determine method annotation type and call the appropriate method
-			// @CreateTable
-			// @Save
-			// @Delete
-			// @Select
+		// @CreateTable
+		// @Save
+		// @Delete
+		// @Select
+		
+		if (method.isAnnotationPresent(CreateTable.class)) {
+            createTable(method);
+	    }
+	    
+	    if (method.isAnnotationPresent(Save.class)) {
+            save(method, proxy);
+	    }
+	    
+	    if (method.isAnnotationPresent(Delete.class)) {
+            delete(method, proxy);
+	    }
+	    
+	    if (method.isAnnotationPresent(Save.class)) {
+            select(method, args);
+	    }
 			
 		return null;
 	}
@@ -62,53 +77,54 @@ public class DaoInvocationHandler implements InvocationHandler {
 //	    CREATE TABLE REGISTRATION (id INTEGER not NULL AUTO_INCREMENT,
 //												first VARCHAR(255), 
 //												last VARCHAR(255), age INTEGER, PRIMARY KEY ( id ))
-		private String template = "CREATE TABLE <name> (<fields>  PRIMARY KEY ( <pk> ))";
+		// private
 		
+		Class<?> methodClass = method.getDeclaringClass();
+		String template = "CREATE TABLE <name> (<fields>  PRIMARY KEY ( <pk> ))";
 
-		public String createSQL(Class clazz)
+		if (methodClass.isAnnotationPresent(MappedClass.class))
 		{
-			if (clazz.isAnnotationPresent(Table.class))
+			Class<?> clazz = methodClass.getAnnotation(MappedClass.class).clazz();
+			Entity t = (Entity) clazz.getAnnotation(Entity.class);
+			
+			String tableName = t.table();
+			
+			String fieldString = "";
+			
+			String pkColumn = null;
+
+			Field[] fields = clazz.getDeclaredFields();
+			for (Field f : fields)
 			{
-				Table t = (Table) clazz.getAnnotation(Table.class);
-				String tableName = t.value();
-				
-				String fieldString = "";
-				
-				String pkColumn = null;
-				
-				Field[] fields = clazz.getDeclaredFields();
-				for (Field f : fields)
+				if (f.isAnnotationPresent(Column.class))
 				{
-					if (f.isAnnotationPresent(Column.class))
+					Column c = f.getAnnotation(Column.class);
+					String name = c.name();
+					String sql = c.sqlType();
+					boolean pk = c.id();
+
+					if (pk==true)
 					{
-						Column c = f.getAnnotation(Column.class);
-						String name = c.name();
-						String sql = c.sql();
-						boolean pk = c.primaryKey();
-						
-						if (pk==true)
-						{
-							pkColumn = name;
-						}
-						
-						fieldString = fieldString + name + " "+sql+", ";
+						pkColumn = name;
 					}
+					
+					fieldString = fieldString + name + " "+sql+", ";
 				}
-				
-				
-				String returnSql = template.replaceAll("<name>", tableName);
-				returnSql = returnSql.replaceAll("<fields>", fieldString);
-				returnSql = returnSql.replaceAll("<pk>", pkColumn);
-							
-				
-				return returnSql;
-				
 			}
-			else
-			{
-				throw new RuntimeException("No @Table");
-			}
+			
+			String returnSql = template.replaceAll("<name>", tableName);
+			returnSql = returnSql.replaceAll("<fields>", fieldString);
+			returnSql = returnSql.replaceAll("<pk>", pkColumn);
+
+			System.out.println(tableName);
+			jdbc.runSQL(returnSql);
+			
 		}
+		else
+		{
+			throw new RuntimeException("No @Table");
+		}
+		
 // 		Using the @MappedClass annotation from method
 		// get the required class 		
 		// use reflection to check all the fields for @Column
@@ -138,6 +154,7 @@ public class DaoInvocationHandler implements InvocationHandler {
 		
 		// run the sql
 //		jdbc.runSQL(SQL STRING);
+		
 	}
 	
 	// handles @Save
