@@ -142,61 +142,138 @@ public class DaoInvocationHandler implements InvocationHandler {
 // 		SAMPLE SQL		
 //  	DELETE FROM REGISTRATION WHERE ID=1
 		
-		
-// 		Using the @MappedClass annotation from method
-		// get the required class 		
-		// use reflection to check all the fields for @Column
-		// find which field is the primary key
-		// for the Object o parameter, get the value of the field and use this as the primary value 
-		// for the WHERE clause
-				// if the primary key field value is null, throw a RuntimeException("no pk value")
-		
-		
-		// run the sql
-//		jdbc.runSQL(SQL STRING);
+	    Class<?> methodClass = method.getDeclaringClass();
+	    if (methodClass.isAnnotationPresent(MappedClass.class)) {
+	        Class<?> entityClass = methodClass.getAnnotation(MappedClass.class).clazz();
+	        Entity entity = entityClass.getAnnotation(Entity.class);
+	        String tableName = entity.table();
+
+	        Field primaryKeyField = null;
+	        Field[] fields = entityClass.getDeclaredFields();
+
+	        for (Field f : fields) {
+	            if (f.isAnnotationPresent(Column.class) && f.getAnnotation(Column.class).id()) {
+	                primaryKeyField = f;
+	                break;
+	            }
+	        }
+
+	        if (primaryKeyField == null) {
+	            throw new RuntimeException("No primary key field found.");
+	        }
+
+	        primaryKeyField.setAccessible(true);
+	        Object pkValue = primaryKeyField.get(o);
+	        if (pkValue == null) {
+	            throw new RuntimeException("No primary key value provided for deletion.");
+	        }
+
+	        String sql = String.format("DELETE FROM %s WHERE %s = %s",
+	                tableName,
+	                primaryKeyField.getAnnotation(Column.class).name(),
+	                getValueAsSql(pkValue));
+
+	        jdbc.runSQL(sql);
+	    } else {
+	        throw new RuntimeException("No @MappedClass annotation found.");
+	    }
 		
 	}
 	
 	// handles @Save
 	private void save(Method method, Object o) throws Exception
 	{
-// 		Using the @MappedClass annotation from method
-		// get the required class 		
-		// use reflection to check all the fields for @Column
-		// find which field is the primary key
-		// for the Object o parameter, get the value of the field
-			// if the field is null run the insert(Object o, Class entityClass, String tableName) method
-			// if the field is not null run the update(Object o, Class entityClass, String tableName) method
+		Class<?> methodClass = method.getDeclaringClass();
+	    if (methodClass.isAnnotationPresent(MappedClass.class)) {
+	        Class<?> entityClass = methodClass.getAnnotation(MappedClass.class).clazz();
+	        Entity entity = entityClass.getAnnotation(Entity.class);
+	        String tableName = entity.table();
 
+	        Field primaryKeyField = null;
+	        Field[] fields = entityClass.getDeclaredFields();
+
+	        for (Field f : fields) {
+	            if (f.isAnnotationPresent(Column.class) && f.getAnnotation(Column.class).id()) {
+	                primaryKeyField = f;
+	                break;
+	            }
+	        }
+
+	        if (primaryKeyField == null) {
+	            throw new RuntimeException("No primary key field found.");
+	        }
+
+	        primaryKeyField.setAccessible(true);
+	        Object pkValue = primaryKeyField.get(o);
+
+	        if (pkValue == null) {
+	            insert(o, entityClass, tableName);
+	        } else {
+	            update(o, entityClass, tableName);
+	        }
+	    } else {
+	        throw new RuntimeException("No @MappedClass annotation found.");
+	    }
 	}
 
 	private void insert(Object o, Class entityClass, String tableName) throws Exception 
 	{
 		
 		
-// 		SAMPLE SQL		
-//		INSERT INTO table_name (column1, column2, column3, ...)
-//		VALUES (value1, value2, value3, ...)	
+		Field[] fields = entityClass.getDeclaredFields();
+	    StringBuilder columns = new StringBuilder();
+	    StringBuilder values = new StringBuilder();
 
+	    for (Field f : fields) {
+	        if (f.isAnnotationPresent(Column.class)) {
+	            f.setAccessible(true);
+	            Column column = f.getAnnotation(Column.class);
 
-//		HINT: columnX comes from the entityClass, valueX comes from o 
-		
-		
-// 		run sql		
-//		jdbc.runSQL(SQL STRING);
+	            if (columns.length() > 0) {
+	                columns.append(", ");
+	                values.append(", ");
+	            }
+
+	            columns.append(column.name());
+	            values.append(getValueAsSql(f.get(o)));
+	        }
+	    }
+
+	    String sql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
+	    jdbc.runSQL(sql);
 	}
 
 	private void update(Object o, Class entityClass, String tableName) throws IllegalAccessException, Exception {
 
-//		SAMPLE SQL		
-//		UPDATE table_name
-//		SET column1 = value1, column2 = value2, ...
-//		WHERE condition;
-		
-//		HINT: columnX comes from the entityClass, valueX comes from o 		
-		
-//		run sql
-//		jdbc.runSQL(SQL STRING);
+		Field[] fields = entityClass.getDeclaredFields();
+	    StringBuilder updates = new StringBuilder();
+	    String primaryKey = null;
+	    Object primaryKeyValue = null;
+
+	    for (Field f : fields) {
+	        f.setAccessible(true);
+	        if (f.isAnnotationPresent(Column.class)) {
+	            Column column = f.getAnnotation(Column.class);
+	            if (column.id()) {
+	                primaryKey = column.name();
+	                primaryKeyValue = f.get(o);
+	            } else {
+	                if (updates.length() > 0) {
+	                    updates.append(", ");
+	                }
+	                updates.append(column.name()).append(" = ").append(getValueAsSql(f.get(o)));
+	            }
+	        }
+	    }
+
+	    if (primaryKey == null || primaryKeyValue == null) {
+	        throw new RuntimeException("Primary key missing or null for update.");
+	    }
+
+	    String sql = String.format("UPDATE %s SET %s WHERE %s = %s",
+	            tableName, updates, primaryKey, getValueAsSql(primaryKeyValue));
+
+	    jdbc.runSQL(sql);
 	}
 
 		
