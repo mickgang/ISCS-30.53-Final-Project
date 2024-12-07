@@ -1,10 +1,13 @@
 package orm;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
+import annotations.Column;
+import annotations.Table;
 import realdb.GhettoJdbcBlackBox;
 
 public class DaoInvocationHandler implements InvocationHandler {
@@ -59,7 +62,53 @@ public class DaoInvocationHandler implements InvocationHandler {
 //	    CREATE TABLE REGISTRATION (id INTEGER not NULL AUTO_INCREMENT,
 //												first VARCHAR(255), 
 //												last VARCHAR(255), age INTEGER, PRIMARY KEY ( id ))
+		private String template = "CREATE TABLE <name> (<fields>  PRIMARY KEY ( <pk> ))";
 		
+
+		public String createSQL(Class clazz)
+		{
+			if (clazz.isAnnotationPresent(Table.class))
+			{
+				Table t = (Table) clazz.getAnnotation(Table.class);
+				String tableName = t.value();
+				
+				String fieldString = "";
+				
+				String pkColumn = null;
+				
+				Field[] fields = clazz.getDeclaredFields();
+				for (Field f : fields)
+				{
+					if (f.isAnnotationPresent(Column.class))
+					{
+						Column c = f.getAnnotation(Column.class);
+						String name = c.name();
+						String sql = c.sql();
+						boolean pk = c.primaryKey();
+						
+						if (pk==true)
+						{
+							pkColumn = name;
+						}
+						
+						fieldString = fieldString + name + " "+sql+", ";
+					}
+				}
+				
+				
+				String returnSql = template.replaceAll("<name>", tableName);
+				returnSql = returnSql.replaceAll("<fields>", fieldString);
+				returnSql = returnSql.replaceAll("<pk>", pkColumn);
+							
+				
+				return returnSql;
+				
+			}
+			else
+			{
+				throw new RuntimeException("No @Table");
+			}
+		}
 // 		Using the @MappedClass annotation from method
 		// get the required class 		
 		// use reflection to check all the fields for @Column
