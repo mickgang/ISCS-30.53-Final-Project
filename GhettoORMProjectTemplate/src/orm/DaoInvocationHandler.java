@@ -280,44 +280,82 @@ public class DaoInvocationHandler implements InvocationHandler {
 	// handles @Select
 	private Object select(Method method, Object[] args) throws Exception
 	{
-		// same style as lab
-		
-// PART I		
-// 		Using the @MappedClass annotation from method
-//		get the required class
-//		Use this class to extra all the column information (this is the replacement for @Results/@Result)		
-//		generate the SELECT QUERY		
+		// PART I
+	    
+	    Class<?> methodClass = method.getDeclaringClass();
+	    if (!methodClass.isAnnotationPresent(MappedClass.class)) {
+	        throw new RuntimeException("No @MappedClass annotation found.");
+	    }
 
-// PART II
-		
-//		this will pull actual values from the DB		
-//		List<HashMap<String, Object>> results = jdbc.runSQLQuery(SQL QUERY);
+	    Class<?> entityClass = methodClass.getAnnotation(MappedClass.class).clazz();
+	    Entity entity = entityClass.getAnnotation(Entity.class);
+	    String tableName = entity.table();
 
-		
-		// process list based on getReturnType
-		if (method.getReturnType()==List.class)
-		{
-			List returnValue = new ArrayList();
-			
-			// create an instance for each entry in results based on mapped class
-			// map the values to the corresponding fields in the object
-			// DO NOT HARD CODE THE TYPE and FIELDS USE REFLECTION
-			
-			return returnValue;
-		}
-		else
-		{
-			// if not a list return type
-			
-			// if the results.size() == 0 return null
-			// if the results.size() >1 throw new RuntimeException("More than one object matches")
-			// if the results.size() == 1
-				// create one instance based on mapped class
-				// map the values to the corresponding fields in the object
-				// DO NOT HARD CODE THE TYPE and FIELDS USE REFLECTION
-						
-			return null;
-		}
-	}
-	
+	    StringBuilder queryBuilder = new StringBuilder("SELECT ");
+	    Field[] fields = entityClass.getDeclaredFields();
+	    List<String> columnNames = new ArrayList<>();
+
+	    for (Field field : fields) {
+	        if (field.isAnnotationPresent(Column.class)) {
+	            columnNames.add(field.getAnnotation(Column.class).name());
+	        }
+	    }
+
+	    if (columnNames.isEmpty()) {
+	        throw new RuntimeException("No columns found for the SELECT query.");
+	    }
+
+	    queryBuilder.append(String.join(", ", columnNames));
+	    queryBuilder.append(" FROM ").append(tableName);
+
+	    
+	    if (args != null && args.length > 0) {
+	        queryBuilder.append(" WHERE ");
+	        for (int i = 0; i < args.length; i += 2) {
+	            if (i > 0) queryBuilder.append(" AND ");
+	            queryBuilder.append(args[i]).append(" = ").append(getValueAsSql(args[i + 1]));
+	        }
+	    }
+
+	    String query = queryBuilder.toString();
+
+	    // PART II
+	    List<HashMap<String, Object>> results = jdbc.runSQLQuery(query);
+
+	    // process list based on getReturnType
+	    if (method.getReturnType() == List.class) {
+	        List<Object> returnValue = new ArrayList<>();
+	        
+	        for (HashMap<String, Object> result : results) {
+	            Object instance = entityClass.getDeclaredConstructor().newInstance();
+	            for (Field field : fields) {
+	                if (field.isAnnotationPresent(Column.class)) {
+	                    field.setAccessible(true);
+	                    Column column = field.getAnnotation(Column.class);
+	                    field.set(instance, result.get(column.name()));
+	                }
+	            }
+	            returnValue.add(instance);
+	        }
+	        return returnValue;
+	    } else {
+	     
+	        if (results.isEmpty()) {
+	            return null;
+	        }
+	        if (results.size() > 1) {
+	            throw new RuntimeException("More than one object matches");
+	        }
+
+	        HashMap<String, Object> result = results.get(0);
+	        Object instance = entityClass.getDeclaredConstructor().newInstance();
+	        for (Field field : fields) {
+	            if (field.isAnnotationPresent(Column.class)) {
+	                field.setAccessible(true);
+	                Column column = field.getAnnotation(Column.class);
+	                field.set(instance, result.get(column.name()));
+	            }
+	        }
+	        return instance;
+	    }
 }
