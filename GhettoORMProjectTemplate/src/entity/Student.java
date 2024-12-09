@@ -20,5 +20,27 @@ public class Student {
 
 	
 	// make all the getter/setter/toString
+	public String getFirst() {
+		return first;
+	}
+	public void setFirst(String firstName) {
+		this.first = firstName;
+	}
+	public String getLast() {
+		return last;
+	}
+	public void setLast(String lastName) {
+		this.last = lastName;
+	}
+	public int getAge() {
+		return age;
+	}
+	public void setAge(int age) {
+		this.age = age;
+	}
+	@Override
+	public String toString() {
+		return String.format("Student [id=%s, firstName=%s, lastName=%s]", id, first, last);
+	}
 
 }

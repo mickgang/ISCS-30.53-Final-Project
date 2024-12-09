@@ -4,7 +4,9 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import annotations.*;
@@ -40,15 +42,15 @@ public class DaoInvocationHandler implements InvocationHandler {
 	    }
 	    
 	    if (method.isAnnotationPresent(Save.class)) {
-            save(method, proxy);
+            save(method, args[0]);
 	    }
 	    
 	    if (method.isAnnotationPresent(Delete.class)) {
-            delete(method, proxy);
+            delete(method, args[0]);
 	    }
 	    
-	    if (method.isAnnotationPresent(Save.class)) {
-            select(method, args);
+	    if (method.isAnnotationPresent(Select.class)) {
+            return select(method, args);
 	    }
 			
 		return null;
@@ -58,7 +60,7 @@ public class DaoInvocationHandler implements InvocationHandler {
 	// HELPER METHOD: when putting in field values into SQL, strings are in quotes otherwise they go in as is
 	private String getValueAsSql(Object o) throws Exception
 	{
-		if (o.getClass()==String.class)
+		if (o != null && o.getClass()==String.class)
 		{
 			return "\""+o+"\"";
 		}
@@ -291,6 +293,36 @@ public class DaoInvocationHandler implements InvocationHandler {
 	    Entity entity = entityClass.getAnnotation(Entity.class);
 	    String tableName = entity.table();
 
+	    Field[] fields = entityClass.getDeclaredFields();
+	    List<String> columnNames = new ArrayList<>();
+
+	    for (Field field : fields) {
+	        if (field.isAnnotationPresent(Column.class)) {
+	            columnNames.add(field.getAnnotation(Column.class).name());
+	        }
+	    }
+	    
+	    
+	    String query = null;
+		if (method.isAnnotationPresent(Select.class))
+		{
+			query = method.getAnnotation(Select.class).value();
+			query = query.replace(":table", tableName);
+		}
+		
+		Parameter[] params = method.getParameters();
+		for (int i = 0; i < params.length; i++)
+		{
+			Parameter p = params[i];
+			if (p.isAnnotationPresent(Param.class))
+			{
+				String parameter = p.getAnnotation(Param.class).value();
+				query = query.replace(":" + parameter, String.format("%s", getValueAsSql(args[i])));
+			}
+		}
+	    
+	    
+		/*
 	    StringBuilder queryBuilder = new StringBuilder("SELECT ");
 	    Field[] fields = entityClass.getDeclaredFields();
 	    List<String> columnNames = new ArrayList<>();
@@ -308,6 +340,10 @@ public class DaoInvocationHandler implements InvocationHandler {
 	    queryBuilder.append(String.join(", ", columnNames));
 	    queryBuilder.append(" FROM ").append(tableName);
 
+	    System.out.println("args here:");
+	    for(Object xxx : args) {
+	    	System.out.println(xxx);
+	    }
 	    
 	    if (args != null && args.length > 0) {
 	        queryBuilder.append(" WHERE ");
@@ -318,6 +354,7 @@ public class DaoInvocationHandler implements InvocationHandler {
 	    }
 
 	    String query = queryBuilder.toString();
+	    */
 
 	    // PART II
 	    List<HashMap<String, Object>> results = jdbc.runSQLQuery(query);
@@ -358,4 +395,5 @@ public class DaoInvocationHandler implements InvocationHandler {
 	        }
 	        return instance;
 	    }
+	}
 }

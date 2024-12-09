@@ -18,4 +18,20 @@ public class Subject {
 	
 	
 	// make all the getter/setter/toString
+	public String getName() {
+		return name;
+	}
+	public void setName(String name) {
+		this.name = name;
+	}
+	public int getNumStudents() {
+		return numStudents;
+	}
+	public void setNumStudents(int numStudents) {
+		this.numStudents = numStudents;
+	}
+	@Override
+	public String toString() {
+		return String.format("Subject [id=%s, firstName=%s, lastName=%s]", id, name, numStudents);
+	}
 }
